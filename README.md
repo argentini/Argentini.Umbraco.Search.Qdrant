@@ -382,4 +382,11 @@ Then further down on the page you can iterate the results. You can even highligh
         </div>
     }
 </div>
+@functions {
+    private sealed class SearchResult
+    {
+        public IPublishedContent? Content { get; init; }
+        public AIVectorSearchResult? Result { get; init; }
+    }
+}
 ```
