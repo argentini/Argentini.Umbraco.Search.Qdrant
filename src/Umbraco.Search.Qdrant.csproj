@@ -9,10 +9,10 @@
 
         <AssemblyVersion>1.0.0</AssemblyVersion>
         <FileVersion>1.0.0</FileVersion>
+        <PackageVersion>1.0.0</PackageVersion>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>argentini.umbraco.search.qdrant</PackageId>
-        <PackageVersion>1.0.0</PackageVersion>
         <Authors>Michael Argentini</Authors>
         <Company>Argentini Unlimited, Ltd</Company>
         <Description>Qdrant vector store support for Umbraco semantic search.</Description>
