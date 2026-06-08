@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Qdrant.Client;
 using Umbraco.AI.Search.Core.VectorStore;
+// ReSharper disable RedundantArgumentDefaultValue
 
 namespace Umbraco.Search.Qdrant.Tests;
 
@@ -114,6 +115,114 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
 
         var results = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), null, 10);
         Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsync_MergesVariationFallbackCollectionsAndOrdersByScore()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var cultureDocumentId = Guid.NewGuid().ToString("D");
+        var invariantDocumentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertManyAsync(
+            indexName,
+            cultureDocumentId,
+            [
+                new AIVectorEntry(cultureDocumentId, "en-US", 0, new ReadOnlyMemory<float>([0.9f, 0.1f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 })
+            ]);
+        await store.UpsertManyAsync(
+            indexName,
+            invariantDocumentId,
+            [
+                new AIVectorEntry(invariantDocumentId, null, 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 })
+            ]);
+
+        var results = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), "en-US", 10);
+
+        Assert.Equal([invariantDocumentId, cultureDocumentId], results.Select(result => result.DocumentId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsEmptyWhenCollectionsDoNotExist()
+    {
+        var store = CreateStore(out _);
+
+        var results = await store.SearchAsync(UniqueIndexName(), new ReadOnlyMemory<float>([1f, 0f, 0f]), null, 10);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ThrowsWhenQueryVectorDimensionDoesNotMatchCollection()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var documentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertAsync(indexName, documentId, null, 0, new ReadOnlyMemory<float>([1f, 0f, 0f]));
+
+        await Assert.ThrowsAsync<Grpc.Core.RpcException>(() =>
+            store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f]), null, 10));
+    }
+
+    [Fact]
+    public async Task SearchAsync_FiltersRealQdrantPayloadsByBoolIntAndLongValues()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var matchingId = Guid.NewGuid().ToString("D");
+        var wrongId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertManyAsync(
+            indexName,
+            matchingId,
+            [
+                new AIVectorEntry(
+                    matchingId,
+                    null,
+                    0,
+                    new ReadOnlyMemory<float>([1f, 0f, 0f]),
+                    new Dictionary<string, object>
+                    {
+                        ["chunkIndex"] = 0,
+                        ["published"] = true,
+                        ["count"] = 7,
+                        ["tenantId"] = 42L
+                    })
+            ]);
+        await store.UpsertManyAsync(
+            indexName,
+            wrongId,
+            [
+                new AIVectorEntry(
+                    wrongId,
+                    null,
+                    0,
+                    new ReadOnlyMemory<float>([1f, 0f, 0f]),
+                    new Dictionary<string, object>
+                    {
+                        ["chunkIndex"] = 0,
+                        ["published"] = false,
+                        ["count"] = 7,
+                        ["tenantId"] = 42L
+                    })
+            ]);
+
+        var results = await store.SearchAsync(
+            indexName,
+            new ReadOnlyMemory<float>([1f, 0f, 0f]),
+            null,
+            10,
+            new Dictionary<string, IReadOnlyCollection<object?>?>
+            {
+                ["published"] = [true],
+                ["count"] = [7],
+                ["tenantId"] = [42L]
+            });
+
+        var result = Assert.Single(results);
+        Assert.Equal(matchingId, result.DocumentId);
     }
 
     private QdrantVectorStore CreateStore(out QdrantClient client)

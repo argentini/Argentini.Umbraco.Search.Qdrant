@@ -22,7 +22,6 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
     }
 
     [Test]
-    [Explicit("Rider's NUnit runner leaves UmbracoIntegrationTest active after passing; run manually with dotnet test --filter FullyQualifiedName~UmbracoSqliteBootTests.")]
     public async Task CoversUmbracoSqliteIntegration()
     {
         NUnit.Framework.Assert.Multiple(() =>

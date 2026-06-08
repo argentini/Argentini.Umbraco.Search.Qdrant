@@ -98,6 +98,56 @@ public sealed class FilteringAiVectorSearcherTests
     }
 
     [Fact]
+    public async Task SearchAsync_DefaultsMissingObjectTypeToDocument()
+    {
+        var id = Guid.NewGuid();
+        var searcher = CreateSearcher(new FakeVectorStore(
+        [
+            new AIVectorSearchResult(id.ToString("D"), 0.9, new Dictionary<string, object>())
+        ]));
+
+        var result = await searcher.SearchAsync("index", "syntax", null, null, null, null, null, null, 0, 10, 0);
+
+        var document = Assert.Single(result.Documents);
+        Assert.Equal(UmbracoObjectTypes.Document, document.ObjectType);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IgnoresInvalidDocumentIds()
+    {
+        var validId = Guid.NewGuid();
+        var searcher = CreateSearcher(new FakeVectorStore(
+        [
+            new AIVectorSearchResult("not-a-guid", 0.99, new Dictionary<string, object>()),
+            new AIVectorSearchResult(validId.ToString("D"), 0.90, new Dictionary<string, object>())
+        ]));
+
+        var result = await searcher.SearchAsync("index", "syntax", null, null, null, null, null, null, 0, 10, 0);
+
+        var document = Assert.Single(result.Documents);
+        Assert.Equal(validId, document.Id);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IncludesResultsOnMinScoreBoundary()
+    {
+        var boundaryId = Guid.NewGuid();
+        var belowId = Guid.NewGuid();
+        var searcher = CreateSearcher(
+            new FakeVectorStore(
+            [
+                new AIVectorSearchResult(boundaryId.ToString("D"), 0.5, new Dictionary<string, object>()),
+                new AIVectorSearchResult(belowId.ToString("D"), 0.49, new Dictionary<string, object>())
+            ]),
+            new AIVectorSearchOptions { DefaultTopK = 10, MinScore = 0.5 });
+
+        var result = await searcher.SearchAsync("index", "syntax", null, null, null, null, null, null, 0, 10, 0);
+
+        var document = Assert.Single(result.Documents);
+        Assert.Equal(boundaryId, document.Id);
+    }
+
+    [Fact]
     public async Task SearchAsync_AllowsProtectedResultWhenAccessBypassesProtection()
     {
         var id = Guid.NewGuid();
