@@ -377,8 +377,14 @@ public partial class FilteringAiVectorIndexer(
     /// </summary>
     private static string GetPropertyText(IPublishedElement element, string propertyAlias) =>
         IsMarkdownEditor(element, propertyAlias)
-            ? element.Value(propertyAlias, fallback: Fallback.ToDefaultValue, defaultValue: string.Empty) ?? string.Empty
-            : element.Value(propertyAlias, fallback: Fallback.ToDefaultValue, defaultValue: string.Empty)?.HtmlToSearchText() ?? string.Empty;
+            ? GetPropertyValue(element, propertyAlias)
+            : GetPropertyValue(element, propertyAlias).HtmlToSearchText();
+
+    /// <summary>
+    /// Gets the converted published value without relying on the global Umbraco fallback service.
+    /// </summary>
+    private static string GetPropertyValue(IPublishedElement element, string propertyAlias) =>
+        element.GetProperty(propertyAlias)?.GetValue()?.ToString() ?? string.Empty;
 
     /// <summary>
     /// Resolves the first configured category or taxonomy property value for metadata and chunk context.
