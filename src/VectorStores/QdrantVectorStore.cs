@@ -17,6 +17,7 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
 {
     private const string CollectionPrefix = "umbraco-sfumato-";
     private readonly ConcurrentDictionary<string, ulong> _ensuredCollections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _collectionLocks = new(StringComparer.OrdinalIgnoreCase);
 
     #region Helpers
 
@@ -99,7 +100,21 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
         if (_ensuredCollections.TryGetValue(collectionName, out var embeddingSize) && embeddingSize == filterOptions.Value.Connection.EmbeddingSize)
             return true;
 
-        return await EnsureCollectionAsync(collectionName, cancellationToken);
+        var collectionLock = _collectionLocks.GetOrAdd(collectionName, _ => new SemaphoreSlim(1, 1));
+
+        await collectionLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (_ensuredCollections.TryGetValue(collectionName, out embeddingSize) && embeddingSize == filterOptions.Value.Connection.EmbeddingSize)
+                return true;
+
+            return await EnsureCollectionAsync(collectionName, cancellationToken);
+        }
+        finally
+        {
+            collectionLock.Release();
+        }
     }
 
     /// <summary>
@@ -212,7 +227,8 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
             Vectors = vector.ToArray(),
             Payload =
             {
-                ["documentId"] = documentId
+                ["documentId"] = documentId,
+                ["chunkIndex"] = chunkIndex
             }
         };
 
@@ -628,7 +644,7 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
             if (IsCollectionForIndex(collectionName, collectionNamePrefix) == false)
                 continue;
             
-            ulong? offset = null;
+            PointId? offset = null;
 
             do
             {
@@ -650,9 +666,9 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
                         documentIds.Add(documentId);
                 }
 
-                offset = response.NextPageOffset?.Num;
+                offset = response.NextPageOffset;
             }
-            while (offset.HasValue);
+            while (offset is not null);
         }
 
         return documentIds.Count;
