@@ -53,18 +53,21 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
     [Test]
     public void CanPersistAndReadContentFromSqlite()
     {
-        var alias = CreateContentType();
+        var alias = CreateContentType(includeBody: true);
         var contentService = GetRequiredService<IContentService>();
 
-        var content = contentService.CreateAndSave("Home", Constants.System.Root, alias);
+        var content = contentService.Create("Home", Constants.System.Root, alias);
+        content.SetValue("body", "<p>Hello <strong>SQLite</strong></p>");
+        contentService.Save(content);
         var saved = contentService.GetById(content.Key);
 
         NUnit.Framework.Assert.That(saved, Is.Not.Null);
         NUnit.Framework.Assert.That(saved!.Name, Is.EqualTo("Home"));
         NUnit.Framework.Assert.That(saved.ContentType.Alias, Is.EqualTo(alias));
+        NUnit.Framework.Assert.That(saved.GetValue<string>("body"), Is.EqualTo("<p>Hello <strong>SQLite</strong></p>"));
     }
 
-    private string CreateContentType()
+    private string CreateContentType(bool includeBody = false)
     {
         var contentTypeService = GetRequiredService<IContentTypeService>();
         var shortStringHelper = GetRequiredService<IShortStringHelper>();
@@ -75,6 +78,21 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
             Name = "Article",
             AllowedAsRoot = true
         };
+
+        if (includeBody)
+        {
+#pragma warning disable CS0618
+            var dataType = GetRequiredService<IDataTypeService>().GetDataType(Constants.DataTypes.RichtextEditor);
+#pragma warning restore CS0618
+            NUnit.Framework.Assert.That(dataType, Is.Not.Null);
+            var body = new PropertyType(shortStringHelper, dataType!)
+            {
+                Alias = "body",
+                Name = "Body"
+            };
+
+            contentType.AddPropertyType(body);
+        }
 
 #pragma warning disable CS0618
         contentTypeService.Save(contentType);
