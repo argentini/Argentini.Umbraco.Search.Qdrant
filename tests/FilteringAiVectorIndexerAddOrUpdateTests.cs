@@ -96,6 +96,46 @@ public sealed class FilteringAiVectorIndexerAddOrUpdateTests
         Assert.Empty(harness.VectorStore.Upserts);
     }
 
+    [Fact]
+    public async Task AddOrUpdateAsync_UsesMediaCacheForMediaItems()
+    {
+        var harness = CreateHarness();
+        var mediaId = Guid.NewGuid();
+
+        await harness.Indexer.AddOrUpdateAsync(
+            "index",
+            mediaId,
+            UmbracoObjectTypes.Media,
+            [new Variation(null, null)],
+            CreateFields(Guid.NewGuid(), "Media text"),
+            null);
+
+        harness.MediaCache.Received(1).GetById(mediaId);
+        harness.ContentCache.DidNotReceive().GetById(mediaId);
+        Assert.Single(harness.VectorStore.Upserts);
+    }
+
+    [Fact]
+    public async Task AddOrUpdateAsync_DoesNotReplaceVectorsWhenOneVariationEmbeddingFails()
+    {
+        var harness = CreateHarness(throwOnEmbeddingCall: 2);
+
+        await harness.Indexer.AddOrUpdateAsync(
+            "index",
+            Guid.NewGuid(),
+            UmbracoObjectTypes.Document,
+            [new Variation("en-US", null), new Variation("da-DK", null)],
+            [
+                new IndexField("Umb_ContentTypeId", new IndexValue { Keywords = [Guid.NewGuid().ToString("D")] }, null, null),
+                new IndexField("body", new IndexValue { Texts = ["English"] }, "en-US", null),
+                new IndexField("body", new IndexValue { Texts = ["Danish"] }, "da-DK", null)
+            ],
+            null);
+
+        Assert.Empty(harness.VectorStore.DeletedDocuments);
+        Assert.Empty(harness.VectorStore.Upserts);
+    }
+
     private static IReadOnlyList<IndexField> CreateFields(Guid contentTypeKey, string text) =>
     [
         new IndexField(
@@ -110,17 +150,23 @@ public sealed class FilteringAiVectorIndexerAddOrUpdateTests
             null)
     ];
 
-    private static Harness CreateHarness(bool hasDefaultProfile = true, int? embeddingCount = null)
+    private static Harness CreateHarness(bool hasDefaultProfile = true, int? embeddingCount = null, int? throwOnEmbeddingCall = null)
     {
         var vectorStore = new RecordingVectorStore();
         var profileService = Substitute.For<IAIProfileService>();
         profileService.HasDefaultProfileAsync(Arg.Any<AICapability>(), Arg.Any<CancellationToken>()).Returns(hasDefaultProfile);
 
         var embeddingService = Substitute.For<IAIEmbeddingService>();
+        var embeddingCallCount = 0;
         embeddingService
             .GenerateEmbeddingsAsync(Arg.Any<Action<AIEmbeddingBuilder>>(), Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
+                embeddingCallCount++;
+
+                if (throwOnEmbeddingCall == embeddingCallCount)
+                    throw new InvalidOperationException("Embedding failed.");
+
                 var texts = call.ArgAt<IEnumerable<string>>(1).ToList();
                 var count = embeddingCount ?? texts.Count;
 
@@ -148,8 +194,11 @@ public sealed class FilteringAiVectorIndexerAddOrUpdateTests
 
         var context = Substitute.For<IUmbracoContext>();
         var contentCache = Substitute.For<IPublishedContentCache>();
+        var mediaCache = Substitute.For<IPublishedMediaCache>();
         contentCache.GetById(Arg.Any<Guid>()).Returns((IPublishedContent?)null);
+        mediaCache.GetById(Arg.Any<Guid>()).Returns((IPublishedContent?)null);
         context.Content.Returns(contentCache);
+        context.Media.Returns(mediaCache);
 
         var contextAccessor = Substitute.For<IUmbracoContextAccessor>();
         var contextFactory = Substitute.For<IUmbracoContextFactory>();
@@ -198,10 +247,10 @@ public sealed class FilteringAiVectorIndexerAddOrUpdateTests
             Options.Create(filterOptions),
             NullLogger<FilteringAiVectorIndexer>.Instance);
 
-        return new Harness(indexer, vectorStore);
+        return new Harness(indexer, vectorStore, contentCache, mediaCache);
     }
 
-    private sealed record Harness(FilteringAiVectorIndexer Indexer, RecordingVectorStore VectorStore);
+    private sealed record Harness(FilteringAiVectorIndexer Indexer, RecordingVectorStore VectorStore, IPublishedContentCache ContentCache, IPublishedMediaCache MediaCache);
 
     private sealed class RecordingVectorStore : IAIVectorStore
     {

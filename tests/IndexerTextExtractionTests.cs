@@ -4,6 +4,7 @@ using Argentini.Umbraco.Search.Qdrant.Indexers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Models;
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Search.Core.Models.Indexing;
@@ -82,6 +83,34 @@ public sealed class IndexerTextExtractionTests
         Assert.DoesNotContain("<p>", text);
     }
 
+    [Fact]
+    public void RenderMarkdownTemplate_UsesFallbackAliasesAndCleansMissingHeadings()
+    {
+        var indexer = CreateIndexer();
+        var element = new FakePublishedElement("summary", "Umbraco.TinyMCE", "<p>Fallback text</p>");
+        var searchDocument = new SearchIndexDocument();
+
+        var result = InvokeRenderMarkdownTemplate(indexer, "# {title}\n\n{title|summary}\n\n{{literal}}", element, searchDocument, null, 0);
+
+        Assert.DoesNotContain("#", result);
+        Assert.Contains("Fallback text", result);
+        Assert.Contains("{literal}", result);
+    }
+
+    [Fact]
+    public void GetBlockSearchText_ReturnsEmptyWhenDepthLimitIsExceeded()
+    {
+        var indexer = CreateIndexer();
+        var searchDocument = new SearchIndexDocument();
+        searchDocument.SearchText.Fields["blocks"] = new SearchTextFieldOptions();
+        var block = new BlockListItem(Guid.NewGuid(), new FakePublishedElement("body", "Umbraco.TinyMCE", "<p>Too deep</p>"), null, null!);
+        var element = new FakePublishedElement("blocks", "Umbraco.BlockList", new[] { block });
+
+        var result = InvokeGetBlockSearchText(indexer, element, searchDocument, "blocks", 9);
+
+        Assert.Empty(result);
+    }
+
     private static string InvokeGetPropertyText(IPublishedElement element, string propertyAlias)
     {
         var method = typeof(FilteringAiVectorIndexer).GetMethod("GetPropertyText", BindingFlags.NonPublic | BindingFlags.Static);
@@ -105,6 +134,29 @@ public sealed class IndexerTextExtractionTests
             .ToList();
     }
 
+    private static string InvokeRenderMarkdownTemplate(FilteringAiVectorIndexer indexer, string template, IPublishedElement element, SearchIndexDocument searchDocument, IPublishedContent? content, int depth)
+    {
+        var method = typeof(FilteringAiVectorIndexer).GetMethod("RenderMarkdownTemplate", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.NotNull(method);
+
+        return Assert.IsType<string>(method.Invoke(indexer, [template, element, searchDocument, content, depth]));
+    }
+
+    private static List<string> InvokeGetBlockSearchText(FilteringAiVectorIndexer indexer, IPublishedElement element, SearchIndexDocument searchDocument, string fieldName, int depth)
+    {
+        var method = typeof(FilteringAiVectorIndexer).GetMethod("GetBlockSearchText", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.NotNull(method);
+
+        var parts = Assert.IsAssignableFrom<IEnumerable>(method.Invoke(indexer, [element, searchDocument, fieldName, depth]));
+
+        return parts
+            .Cast<object>()
+            .Select(part => Assert.IsType<string>(part.GetType().GetProperty("Text")?.GetValue(part)))
+            .ToList();
+    }
+
     private static FilteringAiVectorIndexer CreateIndexer() => new(
         null!,
         null!,
@@ -119,11 +171,17 @@ public sealed class IndexerTextExtractionTests
         Options.Create(new AiSearchIndexFilterOptions()),
         NullLogger<FilteringAiVectorIndexer>.Instance);
 
-    private sealed class FakePublishedElement(string alias, string editorAlias, object? value) : IPublishedElement
+    private sealed class FakePublishedElement : IPublishedElement
     {
-        private readonly FakePublishedProperty _property = new(alias, editorAlias, value);
+        private readonly FakePublishedProperty _property;
 
-        public IPublishedContentType ContentType { get; } = new FakePublishedContentType("testElement");
+        public FakePublishedElement(string alias, string editorAlias, object? value)
+        {
+            _property = new FakePublishedProperty(alias, editorAlias, value);
+            ContentType = new FakePublishedContentType("testElement", [_property.PropertyType]);
+        }
+
+        public IPublishedContentType ContentType { get; }
 
         public Guid Key { get; } = Guid.NewGuid();
 
@@ -150,7 +208,7 @@ public sealed class IndexerTextExtractionTests
 
     private sealed class FakePublishedPropertyType(string alias, string editorAlias) : IPublishedPropertyType
     {
-        public IPublishedContentType ContentType { get; } = new FakePublishedContentType("testElement");
+        public IPublishedContentType ContentType { get; } = new FakePublishedContentType("testElement", []);
 
         public PublishedDataType DataType => null!;
 
@@ -185,7 +243,7 @@ public sealed class IndexerTextExtractionTests
         public object? ConvertInterToDeliveryApiObject(IPublishedElement owner, PropertyCacheLevel referenceCacheLevel, object? inter, bool preview, bool expanding) => inter;
     }
 
-    private sealed class FakePublishedContentType(string alias) : IPublishedContentType
+    private sealed class FakePublishedContentType(string alias, IEnumerable<IPublishedPropertyType> propertyTypes) : IPublishedContentType
     {
         public Guid Key { get; } = Guid.NewGuid();
 
@@ -201,12 +259,13 @@ public sealed class IndexerTextExtractionTests
 
         public bool IsElement => true;
 
-        public IEnumerable<IPublishedPropertyType> PropertyTypes => [];
+        public IEnumerable<IPublishedPropertyType> PropertyTypes { get; } = propertyTypes;
 
         public int GetPropertyIndex(string alias) => 0;
 
-        public IPublishedPropertyType? GetPropertyType(string alias) => null;
+        public IPublishedPropertyType? GetPropertyType(string alias) =>
+            PropertyTypes.FirstOrDefault(propertyType => propertyType.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
-        public IPublishedPropertyType? GetPropertyType(int index) => null;
+        public IPublishedPropertyType? GetPropertyType(int index) => PropertyTypes.ElementAtOrDefault(index);
     }
 }
