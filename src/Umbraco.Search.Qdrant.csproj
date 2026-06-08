@@ -7,9 +7,9 @@
         <Title>Umbraco Semantic Search Qdrant Provider</Title>
         <RootNamespace>Argentini.Umbraco.Search.Qdrant</RootNamespace>
 
-        <AssemblyVersion>1.0.1</AssemblyVersion>
-        <FileVersion>1.0.1</FileVersion>
-        <PackageVersion>1.0.1</PackageVersion>
+        <AssemblyVersion>1.0.2</AssemblyVersion>
+        <FileVersion>1.0.2</FileVersion>
+        <PackageVersion>1.0.2</PackageVersion>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>argentini.umbraco.search.qdrant</PackageId>
