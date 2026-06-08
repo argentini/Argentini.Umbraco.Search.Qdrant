@@ -100,12 +100,12 @@ public sealed class FilteringAiVectorIndexerAddOrUpdateTests
     [
         new IndexField(
             "Umb_ContentTypeId",
-            new Umbraco.Cms.Search.Core.Models.Indexing.IndexValue { Keywords = [contentTypeKey.ToString("D")] },
+            new IndexValue { Keywords = [contentTypeKey.ToString("D")] },
             null,
             null),
         new IndexField(
             "body",
-            new Umbraco.Cms.Search.Core.Models.Indexing.IndexValue { Texts = [text] },
+            new IndexValue { Texts = [text] },
             null,
             null)
     ];
