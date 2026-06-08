@@ -98,6 +98,12 @@ public sealed class QdrantVectorStoreHelperTests
     }
 
     [Fact]
+    public void FromQdrantValue_MapsNullPayloadToNull()
+    {
+        Assert.Null(InvokeStatic("FromQdrantValue", new Value { NullValue = NullValue.NullValue }));
+    }
+
+    [Fact]
     public void CreatePayloadFilter_ReturnsNullForEmptyInput()
     {
         Assert.Null(InvokeStatic("CreatePayloadFilter", [null]));
@@ -155,6 +161,16 @@ public sealed class QdrantVectorStoreHelperTests
 
         Assert.True(boolCondition.Field.Match.Boolean);
         Assert.Equal(7, intCondition.Field.Match.Integer);
+    }
+
+    [Fact]
+    public void CreatePayloadMatch_MapsDecimalValuesToExactRange()
+    {
+        var condition = InvokeStatic<Condition>("CreatePayloadMatch", "price", 2.5m);
+
+        Assert.Null(condition.Field.Match);
+        Assert.Equal(2.5, condition.Field.Range.Gte);
+        Assert.Equal(2.5, condition.Field.Range.Lte);
     }
 
     private static T InvokeStatic<T>(string methodName, params object?[] args)

@@ -15,6 +15,7 @@ public sealed class OptionsAndSchemaTests
         Assert.Equal(6334, options.Connection.ServerPort);
         Assert.False(options.Connection.UseHttps);
         Assert.Equal(1024UL, options.Connection.EmbeddingSize);
+        Assert.False(options.Connection.RemoveOrphanedCollections);
         Assert.Empty(options.Categories);
     }
 
@@ -75,5 +76,37 @@ public sealed class OptionsAndSchemaTests
         Assert.Equal(6334, connection.GetProperty("ServerPort").GetProperty("default").GetInt32());
         Assert.False(connection.GetProperty("UseHttps").GetProperty("default").GetBoolean());
         Assert.Equal(1024, connection.GetProperty("EmbeddingSize").GetProperty("default").GetInt32());
+        Assert.False(connection.GetProperty("RemoveOrphanedCollections").GetProperty("default").GetBoolean());
+    }
+
+    [Fact]
+    public void AppsettingsSchema_DefinesExpectedSearchTextAndChunkingDefaults()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText("appsettings-schema.Umbraco.Search.Qdrant.json"));
+
+        var indexingProperties = document.RootElement
+            .GetProperty("properties")
+            .GetProperty("Qdrant")
+            .GetProperty("properties")
+            .GetProperty("Categories")
+            .GetProperty("additionalProperties")
+            .GetProperty("properties")
+            .GetProperty("Indexing")
+            .GetProperty("items")
+            .GetProperty("properties");
+        var chunkingProperties = indexingProperties
+            .GetProperty("Chunking")
+            .GetProperty("properties");
+        var weight = indexingProperties
+            .GetProperty("SearchText")
+            .GetProperty("properties")
+            .GetProperty("Fields")
+            .GetProperty("additionalProperties")
+            .GetProperty("properties")
+            .GetProperty("Weight");
+
+        Assert.Equal("array", indexingProperties.GetProperty("DocumentTypeAliases").GetProperty("type").GetString());
+        Assert.Equal(1, weight.GetProperty("default").GetInt32());
+        Assert.False(chunkingProperties.GetProperty("UseHeadingAwareChunking").GetProperty("default").GetBoolean());
     }
 }

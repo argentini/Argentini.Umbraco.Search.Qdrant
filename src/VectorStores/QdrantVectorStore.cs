@@ -167,7 +167,7 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
     {
         return value.KindCase switch
         {
-            Value.KindOneofCase.NullValue => value.StringValue,
+            Value.KindOneofCase.NullValue => null!,
             Value.KindOneofCase.StringValue => value.StringValue,
             Value.KindOneofCase.BoolValue => value.BoolValue,
             Value.KindOneofCase.IntegerValue => value.IntegerValue,
@@ -518,7 +518,17 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
                 bool b => new Match { Boolean = b },
                 int i => new Match { Integer = i },
                 long l => new Match { Integer = l },
+                float f => null,
+                double d => null,
+                decimal d => null,
                 _ => new Match { Keyword = value.ToString() ?? string.Empty }
+            },
+            Range = value switch
+            {
+                float f => new global::Qdrant.Client.Grpc.Range { Gte = f, Lte = f },
+                double d => new global::Qdrant.Client.Grpc.Range { Gte = d, Lte = d },
+                decimal d => new global::Qdrant.Client.Grpc.Range { Gte = (double)d, Lte = (double)d },
+                _ => null
             }
         }
     };

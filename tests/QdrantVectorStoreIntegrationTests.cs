@@ -5,6 +5,7 @@ using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Qdrant.Client;
+using Qdrant.Client.Grpc;
 using Umbraco.AI.Search.Core.VectorStore;
 // ReSharper disable RedundantArgumentDefaultValue
 
@@ -37,6 +38,71 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
 
         var collections = await client.ListCollectionsAsync();
         Assert.Contains("umbraco-sfumato-umbai_search", collections);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RecreatesCollectionWhenVectorSizeChanges()
+    {
+        var indexName = UniqueIndexName();
+        var store = CreateStore(out var client, options =>
+        {
+            options.DisableDefaultIndex = true;
+            options.Categories["docs"] = new SearchCategory { IndexAlias = indexName };
+        });
+        var collectionName = CollectionName(indexName);
+
+        await client.CreateCollectionAsync(
+            collectionName,
+            new VectorParams { Size = 2, Distance = Distance.Cosine });
+
+        await store.InitializeAsync();
+
+        var info = await client.GetCollectionInfoAsync(collectionName);
+        Assert.Equal(3UL, info.Config?.Params?.VectorsConfig?.Params?.Size);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RemovesOrphanedPrefixedCollectionsWhenEnabled()
+    {
+        var indexName = UniqueIndexName();
+        var orphanName = CollectionName(UniqueIndexName());
+        var store = CreateStore(out var client, options =>
+        {
+            options.DisableDefaultIndex = true;
+            options.Connection.RemoveOrphanedCollections = true;
+            options.Categories["docs"] = new SearchCategory { IndexAlias = indexName };
+        });
+
+        await client.CreateCollectionAsync(
+            orphanName,
+            new VectorParams { Size = 3, Distance = Distance.Cosine });
+
+        await store.InitializeAsync();
+
+        var collections = await client.ListCollectionsAsync();
+        Assert.Contains(CollectionName(indexName), collections);
+        Assert.DoesNotContain(orphanName, collections);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_PreservesOrphanedPrefixedCollectionsWhenCleanupIsDisabled()
+    {
+        var orphanName = CollectionName(UniqueIndexName());
+        var store = CreateStore(out var client, options =>
+        {
+            options.DisableDefaultIndex = true;
+            options.Connection.RemoveOrphanedCollections = false;
+            options.Categories["docs"] = new SearchCategory { IndexAlias = UniqueIndexName() };
+        });
+
+        await client.CreateCollectionAsync(
+            orphanName,
+            new VectorParams { Size = 3, Distance = Distance.Cosine });
+
+        await store.InitializeAsync();
+
+        var collections = await client.ListCollectionsAsync();
+        Assert.Contains(orphanName, collections);
     }
 
     [Fact]
@@ -144,6 +210,93 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SearchAsync_SearchesSpecificSegmentCollection()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var segmentDocumentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertManyAsync(
+            indexName,
+            segmentDocumentId,
+            [
+                new AIVectorEntry(segmentDocumentId, "en-US__segment__mobile", 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 })
+            ]);
+
+        var results = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), "en-US__segment__mobile", 10);
+
+        var result = Assert.Single(results);
+        Assert.Equal(segmentDocumentId, result.DocumentId);
+        Assert.Equal("mobile", result.Metadata?["segment"]);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RemovesOnlyRequestedVariationCollection()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var documentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertManyAsync(
+            indexName,
+            documentId,
+            [
+                new AIVectorEntry(documentId, null, 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 }),
+                new AIVectorEntry(documentId, "en-US", 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 })
+            ]);
+
+        await store.DeleteAsync(indexName, documentId, "en-US");
+
+        var cultureResults = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), "en-US", 10);
+        var invariantResults = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), null, 10);
+
+        Assert.Single(cultureResults);
+        Assert.Single(invariantResults);
+        Assert.All(cultureResults, result =>
+        {
+            Assert.NotNull(result.Metadata);
+            Assert.False(result.Metadata.ContainsKey("culture"));
+        });
+    }
+
+    [Fact]
+    public async Task GetDocumentCountAsync_CountsDistinctDocumentsAcrossVariationCollections()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var firstDocumentId = Guid.NewGuid().ToString("D");
+        var secondDocumentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertManyAsync(
+            indexName,
+            firstDocumentId,
+            [
+                new AIVectorEntry(firstDocumentId, null, 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 }),
+                new AIVectorEntry(firstDocumentId, "en-US", 0, new ReadOnlyMemory<float>([1f, 0f, 0f]), new Dictionary<string, object> { ["chunkIndex"] = 0 })
+            ]);
+        await store.UpsertAsync(indexName, secondDocumentId, "fr-FR", 0, new ReadOnlyMemory<float>([0f, 1f, 0f]));
+
+        var count = await store.GetDocumentCountAsync(indexName);
+
+        Assert.Equal(2, count);
+    }
+
+    [Fact]
+    public async Task ResetAsync_ClearsSegmentCollections()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var documentId = Guid.NewGuid().ToString("D");
+
+        await store.UpsertAsync(indexName, documentId, "en-US__segment__mobile", 0, new ReadOnlyMemory<float>([1f, 0f, 0f]));
+
+        await store.ResetAsync(indexName);
+
+        var results = await store.SearchAsync(indexName, new ReadOnlyMemory<float>([1f, 0f, 0f]), "en-US__segment__mobile", 10);
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public async Task SearchAsync_ReturnsEmptyWhenCollectionsDoNotExist()
     {
         var store = CreateStore(out _);
@@ -167,7 +320,7 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SearchAsync_FiltersRealQdrantPayloadsByBoolIntAndLongValues()
+    public async Task SearchAsync_FiltersRealQdrantPayloadsByBoolIntLongAndDecimalValues()
     {
         var store = CreateStore(out _);
         var indexName = UniqueIndexName();
@@ -188,7 +341,8 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
                         ["chunkIndex"] = 0,
                         ["published"] = true,
                         ["count"] = 7,
-                        ["tenantId"] = 42L
+                        ["tenantId"] = 42L,
+                        ["price"] = 2.5m
                     })
             ]);
         await store.UpsertManyAsync(
@@ -205,7 +359,8 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
                         ["chunkIndex"] = 0,
                         ["published"] = false,
                         ["count"] = 7,
-                        ["tenantId"] = 42L
+                        ["tenantId"] = 42L,
+                        ["price"] = 2.5m
                     })
             ]);
 
@@ -218,30 +373,74 @@ public sealed class QdrantVectorStoreIntegrationTests : IAsyncLifetime
             {
                 ["published"] = [true],
                 ["count"] = [7],
-                ["tenantId"] = [42L]
+                ["tenantId"] = [42L],
+                ["price"] = [2.5m]
             });
 
         var result = Assert.Single(results);
         Assert.Equal(matchingId, result.DocumentId);
     }
 
-    private QdrantVectorStore CreateStore(out QdrantClient client)
+    [Fact]
+    public async Task SearchAsync_RoundTripsNullAndDatePayloads()
+    {
+        var store = CreateStore(out _);
+        var indexName = UniqueIndexName();
+        var documentId = Guid.NewGuid().ToString("D");
+        var publishedAt = new DateTimeOffset(2026, 6, 7, 12, 30, 0, TimeSpan.Zero);
+
+        await store.UpsertManyAsync(
+            indexName,
+            documentId,
+            [
+                new AIVectorEntry(
+                    documentId,
+                    null,
+                    0,
+                    new ReadOnlyMemory<float>([1f, 0f, 0f]),
+                    new Dictionary<string, object>
+                    {
+                        ["chunkIndex"] = 0,
+                        ["optional"] = null!,
+                        ["publishedAt"] = publishedAt
+                    })
+            ]);
+
+        var results = await store.SearchAsync(
+            indexName,
+            new ReadOnlyMemory<float>([1f, 0f, 0f]),
+            null,
+            10,
+            new Dictionary<string, IReadOnlyCollection<object?>?> { ["publishedAt"] = [publishedAt.ToString("O")] });
+
+        var result = Assert.Single(results);
+        Assert.True(result.Metadata?.ContainsKey("optional"));
+        Assert.Null(result.Metadata?["optional"]);
+        Assert.Equal(publishedAt.ToString("O"), result.Metadata?["publishedAt"]);
+    }
+
+    private QdrantVectorStore CreateStore(out QdrantClient client, Action<AiSearchIndexFilterOptions>? configure = null)
     {
         client = new QdrantClient("localhost", _container.GetMappedPublicPort(6334));
+        var options = new AiSearchIndexFilterOptions
+        {
+            DisableDefaultIndex = false,
+            Connection = new QdrantConnectionOptions
+            {
+                ServerPort = _container.GetMappedPublicPort(6334),
+                EmbeddingSize = 3
+            }
+        };
+
+        configure?.Invoke(options);
 
         return new QdrantVectorStore(
             client,
-            Options.Create(new AiSearchIndexFilterOptions
-            {
-                DisableDefaultIndex = false,
-                Connection = new QdrantConnectionOptions
-                {
-                    ServerPort = _container.GetMappedPublicPort(6334),
-                    EmbeddingSize = 3
-                }
-            }),
+            Options.Create(options),
             NullLogger<QdrantVectorStore>.Instance);
     }
 
     private static string UniqueIndexName() => "test_" + Guid.NewGuid().ToString("N");
+
+    private static string CollectionName(string indexName) => "umbraco-sfumato-" + indexName.ToLowerInvariant();
 }
