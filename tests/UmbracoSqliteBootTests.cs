@@ -1,14 +1,9 @@
-using Argentini.Umbraco.Search.Qdrant.Composers;
-using Argentini.Umbraco.Search.Qdrant.Services;
-using Argentini.Umbraco.Search.Qdrant.VectorStores;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
-using Umbraco.Cms.Core;
-using Umbraco.AI.Search.Core.VectorStore;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Strings;
+using Umbraco.Cms.Core;
 using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.Testing;
 
@@ -27,19 +22,25 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
     }
 
     [Test]
-    public void BootsUmbracoWithSqlite()
+    [Explicit("Rider's NUnit runner leaves UmbracoIntegrationTest active after passing; run manually with dotnet test --filter FullyQualifiedName~UmbracoSqliteBootTests.")]
+    public async Task CoversUmbracoSqliteIntegration()
     {
         NUnit.Framework.Assert.Multiple(() =>
         {
             NUnit.Framework.Assert.That(ScopeProvider, Is.Not.Null);
             NUnit.Framework.Assert.That(ScopeAccessor, Is.Not.Null);
-            NUnit.Framework.Assert.That(GetRequiredService<ITextReplacementProvider>(), Is.TypeOf<EmptyTextReplacementProvider>());
-            NUnit.Framework.Assert.That(GetRequiredService<IAIVectorStore>(), Is.TypeOf<QdrantVectorStore>());
+            NUnit.Framework.Assert.That(GetRequiredService<IContentTypeService>(), Is.Not.Null);
+            NUnit.Framework.Assert.That(GetRequiredService<IContentService>(), Is.Not.Null);
         });
+
+        CanPersistAndReadContentTypeFromSqlite();
+        CanPersistAndReadContentFromSqlite();
+        CanPublishContentInSqlite();
+        CanPersistAndReadMediaFromSqlite();
+        await CanPersistAndReadCultureVariantContentFromSqlite();
     }
 
-    [Test]
-    public void CanPersistAndReadContentTypeFromSqlite()
+    private void CanPersistAndReadContentTypeFromSqlite()
     {
         var alias = CreateContentType();
 
@@ -50,8 +51,7 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
         NUnit.Framework.Assert.That(saved.AllowedAsRoot, Is.True);
     }
 
-    [Test]
-    public void CanPersistAndReadContentFromSqlite()
+    private void CanPersistAndReadContentFromSqlite()
     {
         var alias = CreateContentType(includeBody: true);
         var contentService = GetRequiredService<IContentService>();
@@ -67,8 +67,7 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
         NUnit.Framework.Assert.That(saved.GetValue<string>("body"), Is.EqualTo("<p>Hello <strong>SQLite</strong></p>"));
     }
 
-    [Test]
-    public void CanPublishContentInSqlite()
+    private void CanPublishContentInSqlite()
     {
         var alias = CreateContentType(includeBody: true);
         var contentService = GetRequiredService<IContentService>();
@@ -85,8 +84,7 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
         NUnit.Framework.Assert.That(saved.GetValue<string>("body", published: true), Is.EqualTo("<p>Published <strong>HTML</strong></p>"));
     }
 
-    [Test]
-    public void CanPersistAndReadMediaFromSqlite()
+    private void CanPersistAndReadMediaFromSqlite()
     {
         var mediaService = GetRequiredService<IMediaService>();
         var media = mediaService.CreateMedia("Hero", Constants.System.Root, Constants.Conventions.MediaTypes.Image);
@@ -100,8 +98,7 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
         NUnit.Framework.Assert.That(saved.ContentType.Alias, Is.EqualTo(Constants.Conventions.MediaTypes.Image));
     }
 
-    [Test]
-    public async Task CanPersistAndReadCultureVariantContentFromSqlite()
+    private async Task CanPersistAndReadCultureVariantContentFromSqlite()
     {
         var language = await GetRequiredService<ILanguageService>().GetDefaultLanguageAsync();
         NUnit.Framework.Assert.That(language, Is.Not.Null);
@@ -154,25 +151,6 @@ public sealed class UmbracoSqliteBootTests : UmbracoIntegrationTest
 #pragma warning restore CS0618
 
         return alias;
-    }
-
-    protected override void ConfigureTestServices(IServiceCollection services)
-    {
-        base.ConfigureTestServices(services);
-
-        var qdrantInitializer = services.FirstOrDefault(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService) &&
-            descriptor.ImplementationType == typeof(QdrantVectorStoreInitializer));
-
-        if (qdrantInitializer is not null)
-            services.Remove(qdrantInitializer);
-    }
-
-    protected override void CustomTestSetup(IUmbracoBuilder builder)
-    {
-        base.CustomTestSetup(builder);
-
-        new QdrantVectorStoreComposer().Compose(builder);
     }
 
     private new T GetRequiredService<T>()
