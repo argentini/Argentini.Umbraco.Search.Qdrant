@@ -7,9 +7,9 @@
         <Title>Umbraco Semantic Search Qdrant Provider</Title>
         <RootNamespace>Argentini.Umbraco.Search.Qdrant</RootNamespace>
 
-        <AssemblyVersion>1.0.0</AssemblyVersion>
-        <FileVersion>1.0.0</FileVersion>
-        <PackageVersion>1.0.0</PackageVersion>
+        <AssemblyVersion>1.0.1</AssemblyVersion>
+        <FileVersion>1.0.1</FileVersion>
+        <PackageVersion>1.0.1</PackageVersion>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>argentini.umbraco.search.qdrant</PackageId>
@@ -20,7 +20,7 @@
         <PackageTags>umbraco;qdrant;semantic-search;vector-search</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-        <PackageReleaseNotes>Supports Umbraco.AI.Search 1.0.0-beta9</PackageReleaseNotes>
+        <PackageReleaseNotes>Supports Umbraco.AI.Search 1.0.0-beta9, fixed html filter</PackageReleaseNotes>
         <PackageIcon>nuget-icon.png</PackageIcon>
         <PackageOutputPath>nupkg</PackageOutputPath>
         <PackageProjectUrl>https://github.com/argentini/Argentini.Umbraco.Search.Qdrant</PackageProjectUrl>
