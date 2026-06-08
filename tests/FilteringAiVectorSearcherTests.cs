@@ -87,7 +87,7 @@ public sealed class FilteringAiVectorSearcherTests
         var id = Guid.NewGuid();
         var vectorStore = new FakeVectorStore(
         [
-            new AIVectorSearchResult(id.ToString("D"), 0.9, new Dictionary<string, object> { ["objectType"] = UmbracoObjectTypes.Media.ToString() })
+            new AIVectorSearchResult(id.ToString("D"), 0.9, new Dictionary<string, object> { ["objectType"] = nameof(UmbracoObjectTypes.Media) })
         ]);
         var searcher = CreateSearcher(vectorStore);
 
@@ -146,13 +146,8 @@ public sealed class FilteringAiVectorSearcherTests
         public Task<long> GetDocumentCountAsync(string indexName, CancellationToken cancellationToken = new()) => Task.FromResult(0L);
     }
 
-    private sealed class ThrowingVectorStore : FakeVectorStore
+    private sealed class ThrowingVectorStore() : FakeVectorStore([])
     {
-        public ThrowingVectorStore()
-            : base([])
-        {
-        }
-
         public override Task<IReadOnlyList<AIVectorSearchResult>> SearchAsync(string indexName, ReadOnlyMemory<float> queryVector, string? culture = null, int topK = 10, CancellationToken cancellationToken = new()) =>
             throw new InvalidOperationException("Search failed.");
     }
