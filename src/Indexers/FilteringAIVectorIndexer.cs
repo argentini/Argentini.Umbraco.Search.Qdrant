@@ -378,7 +378,7 @@ public partial class FilteringAiVectorIndexer(
     private static string GetPropertyText(IPublishedElement element, string propertyAlias) =>
         IsMarkdownEditor(element, propertyAlias)
             ? element.Value(propertyAlias, fallback: Fallback.ToDefaultValue, defaultValue: string.Empty) ?? string.Empty
-            : element.Value(propertyAlias, fallback: Fallback.ToDefaultValue, defaultValue: string.Empty) ?? string.Empty.HtmlToSearchText();
+            : element.Value(propertyAlias, fallback: Fallback.ToDefaultValue, defaultValue: string.Empty)?.HtmlToSearchText() ?? string.Empty;
 
     /// <summary>
     /// Resolves the first configured category or taxonomy property value for metadata and chunk context.
