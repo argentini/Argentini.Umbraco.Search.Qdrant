@@ -97,6 +97,66 @@ public sealed class QdrantVectorStoreHelperTests
         Assert.Equal(3L, result[1]);
     }
 
+    [Fact]
+    public void CreatePayloadFilter_ReturnsNullForEmptyInput()
+    {
+        Assert.Null(InvokeStatic("CreatePayloadFilter", [null]));
+        Assert.Null(InvokeStatic("CreatePayloadFilter", new Dictionary<string, IReadOnlyCollection<object?>?>()));
+    }
+
+    [Fact]
+    public void CreatePayloadFilter_CreatesSingleValueMustCondition()
+    {
+        var filter = Assert.IsType<Filter>(InvokeStatic(
+            "CreatePayloadFilter",
+            new Dictionary<string, IReadOnlyCollection<object?>?> { ["category"] = ["Docs"] }));
+
+        var condition = Assert.Single(filter.Must);
+        Assert.Equal("category", condition.Field.Key);
+        Assert.Equal("Docs", condition.Field.Match.Keyword);
+    }
+
+    [Fact]
+    public void CreatePayloadFilter_CreatesNestedShouldForMultipleValues()
+    {
+        var filter = Assert.IsType<Filter>(InvokeStatic(
+            "CreatePayloadFilter",
+            new Dictionary<string, IReadOnlyCollection<object?>?> { ["category"] = ["Docs", "News"] }));
+
+        var condition = Assert.Single(filter.Must);
+        Assert.Equal(2, condition.Filter.Should.Count);
+        Assert.Contains(condition.Filter.Should, item => item.Field.Match.Keyword == "Docs");
+        Assert.Contains(condition.Filter.Should, item => item.Field.Match.Keyword == "News");
+    }
+
+    [Fact]
+    public void CreatePayloadFilter_IgnoresBlankFieldsNullValuesAndDuplicates()
+    {
+        var filter = Assert.IsType<Filter>(InvokeStatic(
+            "CreatePayloadFilter",
+            new Dictionary<string, IReadOnlyCollection<object?>?>
+            {
+                [""] = ["ignored"],
+                ["empty"] = [],
+                ["nullable"] = [null],
+                ["category"] = ["Docs", "Docs"]
+            }));
+
+        var condition = Assert.Single(filter.Must);
+        Assert.Equal("category", condition.Field.Key);
+        Assert.Equal("Docs", condition.Field.Match.Keyword);
+    }
+
+    [Fact]
+    public void CreatePayloadMatch_MapsBooleansAndIntegers()
+    {
+        var boolCondition = InvokeStatic<Condition>("CreatePayloadMatch", "published", true);
+        var intCondition = InvokeStatic<Condition>("CreatePayloadMatch", "count", 7);
+
+        Assert.True(boolCondition.Field.Match.Boolean);
+        Assert.Equal(7, intCondition.Field.Match.Integer);
+    }
+
     private static T InvokeStatic<T>(string methodName, params object?[] args)
     {
         return Assert.IsType<T>(InvokeStatic(methodName, args));

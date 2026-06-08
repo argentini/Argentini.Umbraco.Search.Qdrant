@@ -98,6 +98,22 @@ public sealed class FilteringAiVectorSearcherTests
     }
 
     [Fact]
+    public async Task SearchAsync_AllowsProtectedResultWhenAccessBypassesProtection()
+    {
+        var id = Guid.NewGuid();
+        var vectorStore = new FakeVectorStore(
+        [
+            new AIVectorSearchResult(id.ToString("D"), 0.9, new Dictionary<string, object> { ["accessIds"] = Guid.NewGuid().ToString("D") })
+        ]);
+        var searcher = CreateSearcher(vectorStore);
+
+        var result = await searcher.SearchAsync("index", "syntax", null, null, null, null, null, AccessContext.BypassProtection(), 0, 10, 0);
+
+        var document = Assert.Single(result.Documents);
+        Assert.Equal(id, document.Id);
+    }
+
+    [Fact]
     public async Task SearchAsync_ReturnsEmptyResultWhenVectorStoreThrows()
     {
         var searcher = CreateSearcher(new ThrowingVectorStore());

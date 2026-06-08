@@ -94,6 +94,9 @@ public sealed class FilteringAiVectorSearcher(
         if (accessContext is null)
             return false;
 
+        if (accessContext.Bypass)
+            return true;
+
         var accessIds = accessIdsValue.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (accessIds.Contains(accessContext.PrincipalId.ToString("D")))
