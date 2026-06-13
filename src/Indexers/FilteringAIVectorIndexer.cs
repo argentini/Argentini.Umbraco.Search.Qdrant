@@ -107,7 +107,7 @@ public partial class FilteringAiVectorIndexer(
             return;
         }
 
-        var previousVariationContext = variationContextAccessor.VariationContext;
+        var previousVariationContext = variationContextAccessor?.VariationContext;
         var pendingUpserts = new List<SearchVectorUpsert>();
         var failed = false;
 
@@ -120,7 +120,7 @@ public partial class FilteringAiVectorIndexer(
                 var variationKey = AiVariationKey.Create(variation);
                 var variationFields = fieldList.Where(field => FieldAppliesToVariation(field, variation)).ToList();
 
-                variationContextAccessor.VariationContext = new VariationContext(culture, segment);
+                variationContextAccessor?.VariationContext = new VariationContext(culture, segment);
 
                 var textReplacements = textReplacementProvider.GetReplacements();
                 var prefix = CreateChunkContext(content, searchIndexDocument, textReplacements);
@@ -241,7 +241,7 @@ public partial class FilteringAiVectorIndexer(
         }
         finally
         {
-            variationContextAccessor.VariationContext = previousVariationContext;
+            variationContextAccessor?.VariationContext = previousVariationContext;
         }
 
         if (failed)
