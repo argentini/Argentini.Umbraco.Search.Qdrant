@@ -7,6 +7,7 @@ using Qdrant.Client.Grpc;
 using Umbraco.AI.Search.Core.VectorStore;
 using Argentini.Umbraco.Search.Qdrant.Extensions;
 using Argentini.Umbraco.Search.Qdrant.Indexers;
+// ReSharper disable UnusedVariable
 
 namespace Argentini.Umbraco.Search.Qdrant.VectorStores;
 
@@ -136,7 +137,7 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
         collectionName.StartsWith(collectionNamePrefix + "-", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Deletes points from a collection and ignores the delete when the collection disappeared during the operation.
+    /// Deletes points from a collection and ignores the deletion when the collection disappeared during the operation.
     /// </summary>
     private async Task DeletePointsIfCollectionExistsAsync(string collectionName, Filter filter, CancellationToken cancellationToken)
     {

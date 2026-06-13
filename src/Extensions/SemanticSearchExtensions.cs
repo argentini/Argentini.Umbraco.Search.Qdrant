@@ -63,7 +63,7 @@ public static partial class SemanticSearchExtensions
         {
             weight = Math.Clamp(weight, 1, 5);
 
-            var separator = IsMarkdownList(text)
+            var separator = text.IsMarkdownList()
                 ? "\n"
                 : "\n\n";
 
@@ -72,9 +72,9 @@ public static partial class SemanticSearchExtensions
                 : string.Join(separator, Enumerable.Repeat(text, weight));
         }
 
-        private static bool IsMarkdownList(string value)
+        private bool IsMarkdownList()
         {
-            var lines = value.ReplaceLineEndings("\n")
+            var lines = text.ReplaceLineEndings("\n")
                 .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
             return lines.Length > 0 && lines.All(line => line.StartsWith("- ", StringComparison.Ordinal));
@@ -115,7 +115,7 @@ public static partial class SemanticSearchExtensions
                 return string.Empty;
         
             var converter = new Converter(MarkdownConverterConfig);
-            var markdown = CleanMarkdown(converter.Convert(MinifyHtml(text)));
+            var markdown = converter.Convert(text.MinifyHtml()).CleanMarkdown();
 
             return markdown;
         }

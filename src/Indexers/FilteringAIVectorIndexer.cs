@@ -12,7 +12,6 @@ using Umbraco.AI.Search.Core.Configuration;
 using Umbraco.AI.Search.Core.VectorStore;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Blocks;
-using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Web;
@@ -27,6 +26,7 @@ using Argentini.Umbraco.Search.Qdrant.VectorStores;
 // ReSharper disable CollectionNeverUpdated.Global
 // ReSharper disable UnusedAutoPropertyAccessor.Global
 // ReSharper disable ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
+// ReSharper disable PropertyCanBeMadeInitOnly.Global
 
 namespace Argentini.Umbraco.Search.Qdrant.Indexers;
 
@@ -43,7 +43,7 @@ public partial class FilteringAiVectorIndexer(
     IContentService? contentService,
     IUserService? userService,
     IUmbracoContextFactory umbracoContextFactory,
-    IVariationContextAccessor variationContextAccessor,
+    IVariationContextAccessor? variationContextAccessor,
     ITextReplacementProvider textReplacementProvider,
     IOptions<AIVectorSearchOptions> options,
     IOptions<AiSearchIndexFilterOptions> filterOptions,
@@ -136,7 +136,7 @@ public partial class FilteringAiVectorIndexer(
                 };
 
                 var textParts = ExtractTextFromFields(variationFields, searchIndexDocument, content)
-                    .Select(part => part with { Text = ApplyTextReplacements(part.Text, textReplacements) })
+                    .Select(part => new SearchTextPart(Text: ApplyTextReplacements(part.Text, textReplacements)))
                     .Where(part => string.IsNullOrWhiteSpace(part.Text) == false)
                     .ToList();
                 var text = string.Join("\n\n", textParts.Select(part => part.Text));
@@ -160,7 +160,7 @@ public partial class FilteringAiVectorIndexer(
 
                     var chunkTexts = chunks
                         .Select(chunk => chunk.Text.Trim())
-                        .Where(text => string.IsNullOrWhiteSpace(text) == false)
+                        .Where(i => string.IsNullOrWhiteSpace(i) == false)
                         .ToList();
 
                     if (chunkTexts.Count == 0)
@@ -464,7 +464,7 @@ public partial class FilteringAiVectorIndexer(
     /// </summary>
     private static bool IsComplexSearchValue(object? value) =>
         value is IPublishedElement or BlockListItem or IEnumerable<BlockListItem> or IEnumerable<IPublishedElement> ||
-        value is IEnumerable enumerable && value is not string && enumerable
+        value is IEnumerable enumerable and not string && enumerable
             .Cast<object?>()
             .Any(item => item is IPublishedElement or BlockListItem);
 
@@ -515,7 +515,7 @@ public partial class FilteringAiVectorIndexer(
     }
 
     /// <summary>
-    /// Converts an enumerable of scalar values into de-duplicated display strings.
+    /// Converts an enumerable collection of scalar values into de-duplicated display strings.
     /// </summary>
     private static IEnumerable<string> GetScalarListItems(IEnumerable values)
     {
@@ -692,12 +692,13 @@ public partial class FilteringAiVectorIndexer(
 
             return string.IsNullOrWhiteSpace(templatedText)
                 ? []
-                : [new SearchTextPart("__template", templatedText)];
+                : [new SearchTextPart(templatedText)];
         }
 
         List<SearchTextPart> boostedTexts = [];
         List<SearchTextPart> texts = [];
 
+        // ReSharper disable UnusedVariable
         foreach (var (fieldName, value, culture, segment) in fields ?? [])
         {
             var blockListText = content is null
@@ -714,25 +715,25 @@ public partial class FilteringAiVectorIndexer(
 
             if (value.TextsR1 is not null)
             {
-                var valueTexts = value.TextsR1.Select(text => new SearchTextPart(fieldName, isMarkdown ? text : text.HtmlToSearchText()));
+                var valueTexts = value.TextsR1.Select(text => new SearchTextPart(isMarkdown ? text : text.HtmlToSearchText()));
                 boostedTexts.AddRange(valueTexts);
             }
 
             if (value.TextsR2 is not null)
             {
-                var valueTexts = value.TextsR2.Select(text => new SearchTextPart(fieldName, isMarkdown ? text : text.HtmlToSearchText()));
+                var valueTexts = value.TextsR2.Select(text => new SearchTextPart(isMarkdown ? text : text.HtmlToSearchText()));
                 texts.AddRange(valueTexts);
             }
 
             if (value.TextsR3 is not null)
             {
-                var valueTexts = value.TextsR3.Select(text => new SearchTextPart(fieldName, isMarkdown ? text : text.HtmlToSearchText()));
+                var valueTexts = value.TextsR3.Select(text => new SearchTextPart(isMarkdown ? text : text.HtmlToSearchText()));
                 texts.AddRange(valueTexts);
             }
 
             if (value.Texts is not null)
             {
-                var valueTexts = value.Texts.Select(text => new SearchTextPart(fieldName, isMarkdown ? text : text.HtmlToSearchText()));
+                var valueTexts = value.Texts.Select(text => new SearchTextPart(isMarkdown ? text : text.HtmlToSearchText()));
                 texts.AddRange(valueTexts);
             }
         }
@@ -877,13 +878,13 @@ public partial class FilteringAiVectorIndexer(
     private List<TemplatePathValue> ResolveTemplatePathRoot(string alias, IPublishedElement element, IPublishedContent? rootContent)
     {
         if (rootContent is not null && alias.Equals("Name", StringComparison.OrdinalIgnoreCase))
-            return [new TemplatePathValue(rootContent.Name, alias)];
+            return [new TemplatePathValue(rootContent.Name)];
 
         if (rootContent is not null && alias.Equals("Url", StringComparison.OrdinalIgnoreCase))
-            return [new TemplatePathValue(rootContent.Url(), alias)];
+            return [new TemplatePathValue(rootContent.Url())];
 
         if (alias.Equals("ContentType", StringComparison.OrdinalIgnoreCase))
-            return [new TemplatePathValue(element.ContentType.Alias, alias)];
+            return [new TemplatePathValue(element.ContentType.Alias)];
 
         if (element.HasProperty(alias) == false)
             return [];
@@ -914,7 +915,7 @@ public partial class FilteringAiVectorIndexer(
             {
                 if (alias.Equals("ContentType", StringComparison.OrdinalIgnoreCase))
                 {
-                    results.Add(new TemplatePathValue(element.ContentType.Alias, alias));
+                    results.Add(new TemplatePathValue(element.ContentType.Alias));
                     continue;
                 }
 
@@ -922,13 +923,13 @@ public partial class FilteringAiVectorIndexer(
                 {
                     if (alias.Equals("Name", StringComparison.OrdinalIgnoreCase))
                     {
-                        results.Add(new TemplatePathValue(content.Name, alias));
+                        results.Add(new TemplatePathValue(content.Name));
                         continue;
                     }
 
                     if (alias.Equals("Url", StringComparison.OrdinalIgnoreCase))
                     {
-                        results.Add(new TemplatePathValue(content.Url(), alias));
+                        results.Add(new TemplatePathValue(content.Url()));
                         continue;
                     }
                 }
@@ -942,7 +943,7 @@ public partial class FilteringAiVectorIndexer(
 
                 if (blockParts.Count > 0)
                 {
-                    results.AddRange(blockParts.Select(part => new TemplatePathValue(part.Text, part.FieldName)));
+                    results.AddRange(blockParts.Select(part => new TemplatePathValue(part.Text)));
                     continue;
                 }
 
@@ -970,12 +971,7 @@ public partial class FilteringAiVectorIndexer(
             }
 
             if (value.Value is int userId && ResolveUserProperty(userId, alias) is { } userValue)
-            {
-                results.Add(new TemplatePathValue(userValue, alias));
-                continue;
-            }
-
-            continue;
+                results.Add(new TemplatePathValue(userValue));
         }
 
         return results;
@@ -1097,7 +1093,7 @@ public partial class FilteringAiVectorIndexer(
     private List<TemplatePathValue> ResolveContentServicePathPart(IContent content, string alias)
     {
         if (alias.Equals("Name", StringComparison.OrdinalIgnoreCase))
-            return [new TemplatePathValue(content.Name, alias)];
+            return [new TemplatePathValue(content.Name)];
 
         var property = content.Properties.FirstOrDefault(property => property.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
@@ -1113,7 +1109,7 @@ public partial class FilteringAiVectorIndexer(
                 : ExpandTemplatePathValue(contentValue, alias);
         }
 
-        var editorAlias = property.PropertyType?.PropertyEditorAlias;
+        var editorAlias = property.PropertyType.PropertyEditorAlias;
         var values = GetContentPropertyValues(content, property)
             .Where(IsStoredValuePresent)
             .DistinctBy(GetSearchValueKey, StringComparer.Ordinal)
@@ -1128,7 +1124,7 @@ public partial class FilteringAiVectorIndexer(
 
             return string.IsNullOrWhiteSpace(text)
                 ? []
-                : [new TemplatePathValue(text, alias)];
+                : [new TemplatePathValue(text)];
         }
 
         var value = values.FirstOrDefault(IsStoredValuePresent);
@@ -1229,7 +1225,7 @@ public partial class FilteringAiVectorIndexer(
         yield return culture;
         yield return null;
 
-        foreach (var publishedCulture in content.PublishedCultures ?? [])
+        foreach (var publishedCulture in content.PublishedCultures)
             yield return publishedCulture;
 
         foreach (var editedCulture in content.EditedCultures ?? [])
@@ -1307,7 +1303,7 @@ public partial class FilteringAiVectorIndexer(
     /// Determines whether a converted picker value is empty and should fall back to source value.
     /// </summary>
     private static bool IsEmptyEnumerable(object? value) =>
-        value is IEnumerable enumerable && value is not string && enumerable.Cast<object?>().Any() == false;
+        value is IEnumerable enumerable and not string && enumerable.Cast<object?>().Any() == false;
 
     /// <summary>
     /// Determines whether a resolved value has no searchable content.
@@ -1338,20 +1334,14 @@ public partial class FilteringAiVectorIndexer(
             null => [],
             string text => owner is null
                 ? ExpandPickerSourceText(text, fieldName)
-                : [new TemplatePathValue(GetOwnedPropertyTemplateText(owner, fieldName, text), fieldName)],
-            BlockListItem item => [new TemplatePathValue(item.Content, fieldName)],
-            IEnumerable<BlockListItem> items => items.Select(item => new TemplatePathValue(item.Content, fieldName)).ToList(),
-            IContent content => [new TemplatePathValue(content, fieldName)],
-            IEnumerable<IContent> contents => contents.Select(content => new TemplatePathValue(content, fieldName)).ToList(),
-            IPublishedContent content => [new TemplatePathValue(content, fieldName)],
-            IEnumerable<IPublishedContent> contents => contents.Select(content => new TemplatePathValue(content, fieldName)).ToList(),
-            IPublishedElement element => [new TemplatePathValue(element, fieldName)],
-            IEnumerable<IPublishedElement> elements => elements.Select(element => new TemplatePathValue(element, fieldName)).ToList(),
-            IEnumerable enumerable when owner is not null && IsComplexSearchValue(value) == false =>
+                : [new TemplatePathValue(GetOwnedPropertyTemplateText(owner, fieldName, text))], BlockListItem item => [new TemplatePathValue(item.Content)],
+            IEnumerable<BlockListItem> items => items.Select(item => new TemplatePathValue(item.Content)).ToList(), IContent content => [new TemplatePathValue(content)],
+            IEnumerable<IContent> contents => contents.Select(content => new TemplatePathValue(content)).ToList(), IPublishedContent content => [new TemplatePathValue(content)],
+            IEnumerable<IPublishedContent> contents => contents.Select(content => new TemplatePathValue(content)).ToList(), IPublishedElement element => [new TemplatePathValue(element)],
+            IEnumerable<IPublishedElement> elements => elements.Select(element => new TemplatePathValue(element)).ToList(), IEnumerable enumerable when owner is not null && IsComplexSearchValue(value) == false =>
             [
                 new TemplatePathValue(
-                    GetOwnedPropertyTemplateText(owner, fieldName, enumerable),
-                    fieldName)
+                    GetOwnedPropertyTemplateText(owner, fieldName, enumerable))
             ],
             IEnumerable enumerable when value is not string => enumerable
                 .Cast<object?>()
@@ -1367,7 +1357,7 @@ public partial class FilteringAiVectorIndexer(
     private static string GetOwnedPropertyTemplateText(IPublishedElement owner, string fieldName, object value)
     {
         if (IsMultipleTextStringEditor(owner.GetProperty(fieldName)?.PropertyType.EditorAlias))
-            return FormatMarkdownList(value is IEnumerable enumerable && value is not string ? enumerable : new[] { value });
+            return FormatMarkdownList(value is IEnumerable enumerable and not string ? enumerable : new[] { value });
 
         var text = GetScalarText(value);
 
@@ -1388,7 +1378,7 @@ public partial class FilteringAiVectorIndexer(
 
         return text.Contains("umb://", StringComparison.OrdinalIgnoreCase)
             ? ExpandPickerSourceText(text, fieldName)
-            : [new TemplatePathValue(value, fieldName)];
+            : [new TemplatePathValue(value)];
     }
 
     /// <summary>
@@ -1399,7 +1389,7 @@ public partial class FilteringAiVectorIndexer(
         var matches = UdiPickerValueRegex().Matches(text);
 
         if (matches.Count == 0)
-            return [new TemplatePathValue(text, fieldName)];
+            return [new TemplatePathValue(text)];
 
         var results = new List<TemplatePathValue>();
 
@@ -1414,7 +1404,7 @@ public partial class FilteringAiVectorIndexer(
                 if (objectType.Equals("document", StringComparison.OrdinalIgnoreCase) &&
                     contentService?.GetById(key) is { } serviceContent)
                 {
-                    results.Add(new TemplatePathValue(serviceContent, fieldName));
+                    results.Add(new TemplatePathValue(serviceContent));
                     continue;
                 }
 
@@ -1424,7 +1414,7 @@ public partial class FilteringAiVectorIndexer(
 
                 if (content is not null)
                 {
-                    results.Add(new TemplatePathValue(content, fieldName));
+                    results.Add(new TemplatePathValue(content));
                 }
             }
         }
@@ -1483,7 +1473,7 @@ public partial class FilteringAiVectorIndexer(
                     var propertyText = GetPropertyText(item.Content, propertyAlias);
 
                     if (string.IsNullOrWhiteSpace(propertyText) == false)
-                        parts.Add(new SearchTextPart(propertyAlias, propertyText));
+                        parts.Add(new SearchTextPart(propertyText));
                 }
             }
 
@@ -1722,12 +1712,12 @@ public sealed class SearchChunkContextOptions
 /// <summary>
 /// Represents one extracted property or template text part before chunking.
 /// </summary>
-internal sealed record SearchTextPart(string FieldName, string Text);
+internal sealed record SearchTextPart(string Text);
 
 /// <summary>
 /// Represents one intermediate value while walking a dotted Markdown-template path.
 /// </summary>
-internal sealed record TemplatePathValue(object? Value, string FieldName)
+internal sealed record TemplatePathValue(object? Value)
 {
     public string Text => Value?.ToString() ?? string.Empty;
 }
