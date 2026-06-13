@@ -63,9 +63,21 @@ public static partial class SemanticSearchExtensions
         {
             weight = Math.Clamp(weight, 1, 5);
 
+            var separator = IsMarkdownList(text)
+                ? "\n"
+                : "\n\n";
+
             return weight == 1
                 ? text
-                : string.Join("\n\n", Enumerable.Repeat(text, weight));
+                : string.Join(separator, Enumerable.Repeat(text, weight));
+        }
+
+        private static bool IsMarkdownList(string value)
+        {
+            var lines = value.ReplaceLineEndings("\n")
+                .Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            return lines.Length > 0 && lines.All(line => line.StartsWith("- ", StringComparison.Ordinal));
         }
 
         /// <summary>
