@@ -576,12 +576,12 @@ public partial class FilteringAiVectorIndexer(
     }
 
     /// <summary>
-    /// Resolves direct and dotted context property aliases without applying search-text field weighting.
+    /// Resolves direct and dotted context property aliases.
     /// </summary>
     private string ResolveContextPropertyText(string propertyAlias, IPublishedElement element, SearchIndexDocument? searchIndexDocument, IPublishedContent? rootContent)
     {
         if (propertyAlias.Contains('.', StringComparison.Ordinal))
-            return ResolveTemplatePath(propertyAlias, element, searchIndexDocument ?? new SearchIndexDocument(), rootContent, 0, applyWeights: false);
+            return ResolveTemplatePath(propertyAlias, element, searchIndexDocument ?? new SearchIndexDocument(), rootContent, 0);
 
         return GetPropertyText(element, propertyAlias);
     }
@@ -831,7 +831,7 @@ public partial class FilteringAiVectorIndexer(
     /// <summary>
     /// Resolves dotted template paths through single or multiple picker and block-list values.
     /// </summary>
-    private string ResolveTemplatePath(string path, IPublishedElement element, SearchIndexDocument searchIndexDocument, IPublishedContent? rootContent, int depth, bool applyWeights = true)
+    private string ResolveTemplatePath(string path, IPublishedElement element, SearchIndexDocument searchIndexDocument, IPublishedContent? rootContent, int depth)
     {
         var parts = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
