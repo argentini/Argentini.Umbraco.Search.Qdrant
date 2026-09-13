@@ -436,6 +436,37 @@ public class QdrantVectorStore(QdrantClient client, IOptions<AiSearchIndexFilter
         IReadOnlyDictionary<string, IReadOnlyCollection<object?>?>? payloadFilters,
         CancellationToken cancellationToken = new())
     {
+        try
+        {
+            return await SearchCoreAsync(
+                indexName,
+                queryVector,
+                culture,
+                topK,
+                payloadFilters,
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            cancellationToken.IsCancellationRequested == false &&
+            QdrantTransientFailure.IsTransient(exception))
+        {
+            logger.LogWarning(
+                exception,
+                "Vector search for index {IndexName} failed because Qdrant is unavailable; returning no results.",
+                indexName);
+
+            return [];
+        }
+    }
+
+    private async Task<IReadOnlyList<AIVectorSearchResult>> SearchCoreAsync(
+        string indexName,
+        ReadOnlyMemory<float> queryVector,
+        string? culture,
+        int topK,
+        IReadOnlyDictionary<string, IReadOnlyCollection<object?>?>? payloadFilters,
+        CancellationToken cancellationToken)
+    {
         var collections = await client.ListCollectionsAsync(cancellationToken);
         var scoredPoints = new List<ScoredPoint>();
         var filter = CreatePayloadFilter(payloadFilters);

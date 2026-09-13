@@ -7,9 +7,9 @@
         <Title>Umbraco Semantic Search Qdrant Provider</Title>
         <RootNamespace>Argentini.Umbraco.Search.Qdrant</RootNamespace>
 
-        <AssemblyVersion>18.0.4</AssemblyVersion>
-        <FileVersion>18.0.4</FileVersion>
-        <PackageVersion>18.0.4</PackageVersion>
+        <AssemblyVersion>18.0.5</AssemblyVersion>
+        <FileVersion>18.0.5</FileVersion>
+        <PackageVersion>18.0.5</PackageVersion>
 
         <PackageId>argentini.umbraco.search.qdrant</PackageId>
         <Authors>Michael Argentini</Authors>
@@ -19,7 +19,7 @@
         <PackageTags>umbraco;qdrant;semantic-search;vector-search</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-        <PackageReleaseNotes>Qdrant outage handled gracefully.</PackageReleaseNotes>
+        <PackageReleaseNotes>Qdrant outage handled gracefully; search no longer throws during outage.</PackageReleaseNotes>
         <PackageIcon>nuget-icon.png</PackageIcon>
         <PackageOutputPath>nupkg</PackageOutputPath>
         <PackageProjectUrl>https://github.com/argentini/Argentini.Umbraco.Search.Qdrant</PackageProjectUrl>
